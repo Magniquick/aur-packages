@@ -1,0 +1,79 @@
+name: xdg-desktop-portal-gtk4-bin
+
+on:
+  schedule:
+    - cron: '23 5 * * *'
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'xdg-desktop-portal-gtk4-bin/**'
+      - 'scripts/**'
+      - '.github/workflows/xdg-desktop-portal-gtk4-bin.yml'
+  pull_request:
+    paths:
+      - 'xdg-desktop-portal-gtk4-bin/**'
+      - 'scripts/**'
+      - '.github/workflows/xdg-desktop-portal-gtk4-bin.yml'
+
+concurrency:
+  group: xdg-desktop-portal-gtk4-bin
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  PKG: xdg-desktop-portal-gtk4-bin
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    permissions:
+      contents: write
+    steps:
+      - name: Install tools
+        run: |
+          pacman -Syu --noconfirm --needed base-devel git jq perl openssh dbus glib2 weston xdg-desktop-portal
+          useradd -m builder
+          echo 'builder ALL=(ALL) NOPASSWD: ALL' >/etc/sudoers.d/builder
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Check upstream for a new release
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          COMMIT_MSG_FILE: ${{ runner.temp }}/commit-msg
+        run: ./$PKG/update.sh
+
+      - name: Build, install and run e2e checks
+        run: |
+          chown -R builder: .
+          sudo -u builder ./scripts/build.sh "$PKG"
+
+      - name: Commit the bump to this repo
+        if: github.event_name != 'pull_request'
+        env:
+          COMMIT_MSG_FILE: ${{ runner.temp }}/commit-msg
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git add "$PKG/PKGBUILD" "$PKG/.SRCINFO"
+          if git diff --cached --quiet; then
+            echo "Nothing to commit."
+            exit 0
+          fi
+          msg="$PKG: $(cat "$COMMIT_MSG_FILE" 2>/dev/null || echo 'regenerate .SRCINFO')"
+          git -c user.name='github-actions[bot]' \
+              -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+              commit -m "$msg"
+          git push origin HEAD:main
+
+      - name: Push to the AUR
+        if: github.event_name != 'pull_request'
+        env:
+          AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+          AUR_GIT_NAME: Navon John Lukose
+          AUR_GIT_EMAIL: 67406856+Magniquick@users.noreply.github.com
+          COMMIT_MSG_FILE: ${{ runner.temp }}/commit-msg
+        run: ./scripts/aur-sync.sh "$PKG"
