@@ -15,9 +15,10 @@ printf '%s\n' "$AUR_SSH_PRIVATE_KEY" >"$key"
 chmod 600 "$key"
 export GIT_SSH_COMMAND="ssh -i $key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$root/scripts/aur_known_hosts"
 
-# PKGBUILD, .SRCINFO, and any local (non-URL) sources.
+# PKGBUILD, .SRCINFO, .gitignore if present, and any local (non-URL) sources.
 mapfile -t files < <(
 	printf '%s\n' PKGBUILD .SRCINFO
+	[[ -f $pkg/.gitignore ]] && echo .gitignore
 	sed -n 's/^\tsource\(_[a-z0-9_]*\)\? = //p' "$pkg/.SRCINFO" | sed 's/^[^:]*:://' | grep -v '://' || true
 )
 
@@ -39,6 +40,7 @@ if [[ -s ${COMMIT_MSG_FILE:-} ]]; then
 	msg=$(cat "$COMMIT_MSG_FILE")
 else
 	msg=$(git log -1 --format=%s -- "$pkg")
+	msg=${msg#"$pkg: "}
 fi
 git -C "$aur" diff --cached --stat
 git -C "$aur" -c user.name="$AUR_GIT_NAME" -c user.email="$AUR_GIT_EMAIL" commit --quiet -m "$msg"
