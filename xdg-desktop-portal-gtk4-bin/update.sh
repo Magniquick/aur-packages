@@ -19,7 +19,7 @@ cd "$(dirname "$0")"
 
 upstream=JohnRTitor/xdg-desktop-portal-gtk4
 min_age_hours=${MIN_AGE_HOURS:-24}
-required_checks=('test (stable)' 'matrix-distro (archlinux:latest)')
+required_checks=('test (stable)' 'test (archlinux:latest)')
 
 api() {
 	local auth=()
